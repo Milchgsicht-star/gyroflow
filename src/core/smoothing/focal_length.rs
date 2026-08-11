@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright © 2021-2022 Adrian <adrian.eddy at gmail>
 
+use rayon::prelude::*;
+
 /// Apply Gaussian smoothing to focal length data
 /// 
 /// # Arguments
@@ -34,12 +36,9 @@ pub fn smooth_focal_lengths_gaussian(focal_lengths: &[Option<f64>], strength: f6
         *k /= kernel_sum;
     }
     
-    let mut smoothed = Vec::with_capacity(focal_lengths.len());
-    
-    for i in 0..focal_lengths.len() {
-        if focal_lengths[i].is_none() {
-            smoothed.push(None);
-            continue;
+    focal_lengths.par_iter().enumerate().map(|(i, &val)| {
+        if val.is_none() {
+            return None;
         }
         
         let mut weighted_sum = 0.0;
@@ -56,15 +55,13 @@ pub fn smooth_focal_lengths_gaussian(focal_lengths: &[Option<f64>], strength: f6
         if weight_sum > 0.0 {
             let smoothed_value = weighted_sum / weight_sum;
             // Blend between original and smoothed based on strength
-            if let Some(original) = focal_lengths[i] {
-                smoothed.push(Some(original * (1.0 - strength) + smoothed_value * strength));
+            if let Some(original) = val {
+                Some(original * (1.0 - strength) + smoothed_value * strength)
             } else {
-                smoothed.push(Some(smoothed_value));
+                Some(smoothed_value)
             }
         } else {
-            smoothed.push(focal_lengths[i]);
+            val
         }
-    }
-    
-    smoothed
+    }).collect()
 }

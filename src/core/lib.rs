@@ -451,6 +451,31 @@ impl StabilizationManager {
     }
     pub fn recompute_adaptive_zoom(&self) {
         let mut params = stabilization::ComputeParams::from_manager(self);
+
+        // Extract and smooth focal lengths BEFORE FOV calculation (only if enabled and video has per-frame FL data)
+        let smoothing_enabled = self.params.read().focal_length_smoothing_enabled;
+        if smoothing_enabled && !params.gyro.read().file_metadata.read().lens_params.is_empty() {
+            let focal_lengths = Self::extract_focal_lengths(&params);
+            if !focal_lengths.is_empty() {
+                let (smoothing_strength, time_window) = {
+                    let sp = self.params.read();
+                    (sp.focal_length_smoothing_strength, sp.focal_length_time_window)
+                };
+                
+                let window_frames = (params.scaled_fps * time_window).round() as usize;
+                let smoothed_focal_lengths = crate::smoothing::focal_length::smooth_focal_lengths_gaussian(&focal_lengths, smoothing_strength, window_frames);
+                
+                params.focal_lengths = focal_lengths;
+                params.smoothed_focal_lengths = smoothed_focal_lengths;
+                params.focal_length_smoothing_enabled = true;
+            }
+        } else {
+            // Clear focal length data when disabled
+            params.focal_lengths.clear();
+            params.smoothed_focal_lengths.clear();
+            params.focal_length_smoothing_enabled = false;
+        }
+
         params.calculate_camera_fovs();
 
         let lens_fov_adjustment = params.lens.optimal_fov.unwrap_or(1.0);
@@ -463,6 +488,10 @@ impl StabilizationManager {
             stab_params.set_fovs( params.fovs.clone(), lens_fov_adjustment);
             stab_params.minimal_fovs = params.minimal_fovs.clone();
             stab_params.zooming_debug_points = debug_points;
+            // Store focal length data in persistent params so it's available in recompute_undistortion
+            stab_params.focal_lengths = params.focal_lengths.clone();
+            stab_params.smoothed_focal_lengths = params.smoothed_focal_lengths.clone();
+            stab_params.focal_length_smoothing_enabled = params.focal_length_smoothing_enabled;
             (
                 stab_params.max_zoom.unwrap_or(0.0),
                 params.keyframes.get_keyframes(&KeyframeType::MaxZoom).map(|x| x.iter().map(|x| x.1.value).max_by(|a, b| a.total_cmp(b)).unwrap_or(stab_params.max_zoom.unwrap_or(0.0))).unwrap_or(stab_params.max_zoom.unwrap_or(0.0)),
@@ -1633,6 +1662,9 @@ impl StabilizationManager {
                 if let Some(v) = obj.get("horizontal_rs")         .and_then(|x| x.as_bool()) { if v { params.frame_readout_direction = if params.frame_readout_time < 0.0 { ReadoutDirection::RightToLeft } else { ReadoutDirection::LeftToRight }; } }
                 if let Some(v) = obj.get("max_zoom")              .and_then(|x| x.as_f64()) { params.max_zoom                = Some(v); }
                 if let Some(v) = obj.get("max_zoom_iterations")   .and_then(|x| x.as_i64()) { params.max_zoom_iterations     = v as _; }
+                if let Some(v) = obj.get("focal_length_smoothing_enabled").and_then(|x| x.as_bool()) { params.focal_length_smoothing_enabled = v; }
+                if let Some(v) = obj.get("focal_length_smoothing_strength").and_then(|x| x.as_f64()) { params.focal_length_smoothing_strength = v; }
+                if let Some(v) = obj.get("focal_length_time_window").and_then(|x| x.as_f64()) { params.focal_length_time_window = v; }
 
                 if let Some(v) = obj.get("video_speed").and_then(|x| x.as_f64()) { params.video_speed = v; }
                 if let Some(v) = obj.get("video_speed_affects_smoothing")    .and_then(|x| x.as_bool()) { params.video_speed_affects_smoothing     = v; }

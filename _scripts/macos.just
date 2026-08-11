@@ -150,7 +150,7 @@ deploy *param:
         #export DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/usr/lib/"
         export DYLD_FALLBACK_LIBRARY_PATH="$(xcode-select --print-path)/Toolchains/XcodeDefault.xctoolchain/usr/lib/"
         #export LD_LIBRARY_PATH="$PROJECT_DIR/ext/{{QtVersion}}/macos/lib"
-        export MACOSX_DEPLOYMENT_TARGET="10.14"
+        export MACOSX_DEPLOYMENT_TARGET="10.15"
 
         export FFMPEG_DIR=$PROJECT_DIR/ext/ffmpeg-x86_64
         export OPENCV_LINK_PATHS=$OPENCV_DIR/x64-osx/lib
@@ -330,9 +330,9 @@ deploy *param:
 
             for i in 1 2 3 4 5 6 7 8 9 10
             do
-                sudo mdutil -a -i off
-                sudo pkill -9 XProtect >/dev/null || true
-                while pgrep XProtect; do sleep 3; done;
+                # sudo mdutil -a -i off
+                # sudo pkill -9 XProtect >/dev/null || true
+                # while pgrep XProtect; do sleep 3; done;
 
                 hdiutil create "$PROJECT_DIR/_deployment/_binaries/Gyroflow-mac-universal.dmg" -volname "Gyroflow v{{ProjectVersion}}" -fs HFS+ -srcfolder "$PROJECT_DIR/_deployment/_binaries/mac/" -ov -format UDZO -imagekey zlib-level=9 || true
 
